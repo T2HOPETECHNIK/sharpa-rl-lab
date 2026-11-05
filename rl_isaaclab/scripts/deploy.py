@@ -25,6 +25,7 @@ from rl_isaaclab.wrapper.sharpa_wave_deploy_env_wrapper import GymStyleEnvWrappe
 from rl_isaaclab.wrapper.config_wrapper import ConfigWrapper
 
 import rl_isaaclab.tasks.inhand_rotate
+import rl_isaaclab.tasks.tool_wrap
 
 # PLACEHOLDER: Extension template (do not remove this comment)
 

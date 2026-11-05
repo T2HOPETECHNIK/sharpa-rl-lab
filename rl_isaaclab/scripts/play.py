@@ -46,6 +46,7 @@ from rl_isaaclab.wrapper.config_wrapper import ConfigWrapper
 from isaaclab.envs import DirectRLEnvCfg
 
 import rl_isaaclab.tasks.inhand_rotate
+import rl_isaaclab.tasks.tool_wrap
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
 # PLACEHOLDER: Extension template (do not remove this comment)
