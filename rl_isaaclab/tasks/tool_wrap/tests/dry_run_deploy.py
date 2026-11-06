@@ -1,6 +1,6 @@
 '''Dry-run rl_isaaclab/scripts/deploy.py for the tool-wrap task against a fake SharpaWave SDK (no hand needed):
 
-    PYTHONPATH=$PWD python rl_isaaclab/tasks/tool_wrap/tests/dry_run_deploy.py logs/tool_wrap/<run>/stage2_nn/best.pth
+    PYTHONPATH=$PWD python rl_isaaclab/tasks/tool_wrap/tests/dry_run_deploy.py logs/tool_wrap/<run>/stage2_nn/best.pth [--record]
 
 The fake hand reports contact on the thumb, index and middle pads after the 25th closing-trajectory command, so the
 pinch trigger fires; the policy then runs for 115 steps with keyboard control off. Prints observation shapes,
@@ -61,9 +61,9 @@ def step(self, action):
               f"proprio_hist {tuple(out[0]['proprio_hist'].shape)} |action| max {np.abs(a).max():.2f} "
               f"fingertip forces (obs, first frame) {obs[0, 44:59].cpu().numpy().round(2).reshape(5, 3).tolist()}", flush=True)
     if k >= 115:
-        print("[dry-run] done", flush=True); os._exit(0)
+        print("[dry-run] done", flush=True); raise SystemExit(0)  # through deploy.py's finally, so --record saves
     return out
 de.SharpaWaveToolWrapDeployEnv.step = step
 sys.argv = ["deploy.py", "--task", "Isaac-Tool-Wrap-Deploy-Sharpa-Wave-v0", "--hand_side", "1", "--device", "cpu",
-            "--load_path", sys.argv[1]]
+            "--load_path", sys.argv[1], *sys.argv[2:]]
 runpy.run_path("rl_isaaclab/scripts/deploy.py", run_name="__main__")

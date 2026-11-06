@@ -156,7 +156,8 @@ class SharpaWaveInhandRotateDeployEnv(gym.Env):
                     sn_id = 0
                     print(f"Device found: {devices[sn_id]}")
                     cfg = SharpaWaveConfig()
-                    cfg.tactile_config_file = "/root/.sharpa-pilot/config/tactile.json"
+                    cfg.tactile_config_file = os.environ.get(
+                        'SHARPA_TACTILE_CONFIG', "/root/.sharpa-pilot/config/tactile.json")
                     return manager.connect(devices[sn_id], cfg)
         except Exception as e:
             print(f"Failed to connect to device: {str(e)}")
@@ -194,6 +195,12 @@ class SharpaWaveInhandRotateDeployEnv(gym.Env):
 
     def change_tactile_config(self, on_board=False):
         """Switch tactile inference between on-board and host mode."""
+        # Outside Sharpa's container, point SHARPA_TACTILE_CONFIG at a tactile.json that is
+        # already in the wanted mode (e.g. the SDK's on-board config); it is used as is.
+        override = os.environ.get('SHARPA_TACTILE_CONFIG')
+        if override:
+            print(f"[TactileConfig] Using {override} as is (SHARPA_TACTILE_CONFIG)")
+            return True
         tactile_config_path = '/root/.sharpa-pilot/config/tactile.json'
 
         try:

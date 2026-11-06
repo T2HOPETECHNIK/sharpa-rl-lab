@@ -12,6 +12,8 @@ parser.add_argument("--device", type=str, default='cuda:0', help="Device to use 
 parser.add_argument("--enable_on_board", action="store_true", help="Enable on-board Tactile.")
 parser.add_argument("--hand_side", type=int, default=None, help="0 for left hand, 1 for right hand.")
 parser.add_argument("--pose_id", type=int, default=0)
+parser.add_argument("--record", action="store_true", help="Save per-step observations, actions, joints and forces to an .npz.")
+parser.add_argument("--record_dir", type=str, default="logs/deploy_records", help="Where --record writes its files.")
 
 args_cli, hydra_args = parser.parse_known_args()
 
@@ -23,6 +25,7 @@ from datetime import datetime
 from rl_isaaclab.algo.padapt.padapt import ProprioAdapt
 from rl_isaaclab.wrapper.sharpa_wave_deploy_env_wrapper import GymStyleEnvWrapper
 from rl_isaaclab.wrapper.config_wrapper import ConfigWrapper
+from rl_isaaclab.utils.deploy_recorder import DeployRecorder
 
 import rl_isaaclab.tasks.inhand_rotate
 import rl_isaaclab.tasks.tool_wrap
@@ -97,14 +100,21 @@ def main(env_cfg, agent_cfg: dict):
     # load previously trained model
     agent.restore_test(resume_path)
     agent.set_eval()
-    obs_dict = agent.env.reset()
-    while True:
-        input_dict = {
-            'obs': agent.running_mean_std(obs_dict['obs']),
-            'proprio_hist': agent.sa_mean_std(obs_dict['proprio_hist'].detach()),
-        }
-        mu = agent.model.act_inference(input_dict)
-        obs_dict, r, done, info = agent.env.step(mu)
+    recorder = DeployRecorder(env, args_cli.record_dir, args_cli.task, args_cli) if args_cli.record else None
+    try:
+        obs_dict = agent.env.reset()
+        while True:
+            input_dict = {
+                'obs': agent.running_mean_std(obs_dict['obs']),
+                'proprio_hist': agent.sa_mean_std(obs_dict['proprio_hist'].detach()),
+            }
+            mu = agent.model.act_inference(input_dict)
+            if recorder is not None:
+                recorder.add(obs_dict['obs'], mu)
+            obs_dict, r, done, info = agent.env.step(mu)
+    finally:
+        if recorder is not None:
+            recorder.close()
 
 
 if __name__ == "__main__":

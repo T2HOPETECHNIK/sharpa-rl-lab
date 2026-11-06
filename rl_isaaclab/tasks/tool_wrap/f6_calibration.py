@@ -5,8 +5,11 @@ tool-wrap policy was trained on. Pure numpy so it can be tested without the hand
 Sim elastomer frame, the same for all five digits (from the joint frames in assets/SharpaWave/right_sharpa_wave.usda):
     -z  out of the pad (the pad faces -z)
     -y  toward the fingertip
-    +x  sideways: toward the thumb side for the fingers, toward the palm side for the thumb (hand open flat)
+    +x  sideways: toward the thumb side for the fingers; for the thumb, away from the fingers, toward the side the
+        palm faces (hand open flat; checked on the joint frames: the thumb pad -> index pad direction is -0.6 along it)
 Forces are the force acting ON the pad, the convention of Isaac Lab contact sensors.
+The F6 frames turned out to match these to within ~15 deg on all five digits (2026-11-05 calibration), so every digit
+should fit with the same sign; a digit whose sign differs had a push done the wrong way round.
 
 Calibration pushes (done with your own fingertip on the hand's pad) and the force they put on the pad:
     press       straight into the pad            -> +z
@@ -28,7 +31,8 @@ COMPONENTS = {"into pad": TARGETS["press"], "toward tip": TARGETS["toward_tip"],
 
 
 def instruction(push: str, finger: str) -> str:
-    side = "toward the palm side (away from the back of the hand)" if finger == "thumb" else "toward the thumb side of the hand"
+    side = ("away from the fingers, toward the side the palm faces (down when the palm faces down)" if finger == "thumb"
+            else "toward the thumb side of the hand")
     return {
         "press": f"Press straight into the {finger} pad (the soft tip, palm side), about 2-5 N, and hold.",
         "toward_tip": f"Rest your fingertip on the {finger} pad, press lightly, and drag the pad skin toward the tip "

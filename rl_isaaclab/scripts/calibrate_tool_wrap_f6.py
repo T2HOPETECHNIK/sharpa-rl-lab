@@ -82,6 +82,12 @@ def calibrate(env, out_path):
             "measured": {k: v.round(4).tolist() for k, v in measured.items()},
             "baseline": baseline.round(4).tolist(),
         }
+    signs = {finger: d["sign"] for finger, d in digits.items()}
+    majority = max(set(signs.values()), key=list(signs.values()).count)
+    for finger, s in signs.items():
+        if s != majority:
+            print(f"  WARNING: {finger} fitted with sign {s:+.0f} while the other digits have {majority:+.0f}. The sensors are "
+                  f"identical, so one of its pushes (most likely sideways) went the wrong way round; re-run the script.")
     calib = {"hand_side": args.hand_side, "created": time.strftime("%Y-%m-%d %H:%M:%S"), "digits": digits}
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w") as f:
