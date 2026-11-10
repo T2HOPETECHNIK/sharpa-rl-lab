@@ -3,12 +3,15 @@
     PYTHONPATH=$PWD python rl_isaaclab/tasks/tool_wrap/tests/dry_run_deploy.py logs/tool_wrap/<run>/stage2_nn/best.pth [--record]
 
 The fake hand reports contact on the thumb, index and middle pads after the 25th closing-trajectory command, so the
-pinch trigger fires; the policy then runs for 115 steps with keyboard control off. Prints observation shapes,
+pinch trigger fires; the policy then runs for 115 steps with keyboard control off. Its index pad also reads a stuck
+[7.5, -4.6, -1.0] N at rest, as the real one did; deploy's rest re-zero should print and remove it (FAKE_INDEX_OFFSET=0
+turns it off). Prints observation shapes,
 whether they are finite, action sizes and the fingertip forces the policy sees. Needs cache/tool_wrap_deploy_init_traj.npy.
 '''
 import os, sys, threading, time, types, runpy
 import numpy as np
 state = {"cmds": 0, "last": [0.0] * 22, "policy_steps": 0, "contact_after": 25}
+INDEX_OFFSET = [0.0] * 6 if os.environ.get("FAKE_INDEX_OFFSET") == "0" else [7.5, -4.6, -1.0, 0, 0, 0]
 class Err:  code = 0; message = ""
 class FakeHand:
     def get_device_info(self): return types.SimpleNamespace(ip="0.0.0.0")
@@ -26,6 +29,8 @@ class FakeHand:
                 for ch in range(5):   # right hand: channels 0..4; deploy maps channel 4-k to finger k (thumb=4)
                     finger = 4 - ch
                     f = [0.3, -0.4, 1.2, 0, 0, 0] if touching and finger in (0, 1, 2) else [0.0] * 6
+                    if finger == 1:
+                        f = [a + b for a, b in zip(f, INDEX_OFFSET)]
                     self.cb({"channel": ch, "content": {"F6": f, "CONTACT_POINT": None}})
                 time.sleep(0.006)
         threading.Thread(target=run, daemon=True).start()

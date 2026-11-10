@@ -16,6 +16,8 @@ dof_pos and cur_targets are the state the action was computed from. Per-step arr
     dof_pos         (N, 22)   measured joint angles, Isaac Lab order
     cur_targets     (N, 22)   joint targets before this action, Isaac Lab order
     raw_f6          (N, 5, 3) raw fingertip F6 forces, sensor frames, thumb..pinky (tool-wrap only, nan otherwise)
+    f6_baseline     (N, 5, 3) the rest reading deploy subtracts from raw_f6 before calibration (tool-wrap rest
+                              re-zero; zeros when off, nan for envs without it). Added after v4; older files lack it.
 Metadata: meta_json (args, cfg values, git commit, checkpoint md5, F6 calibration), init_traj (closing trajectory).
 '''
 
@@ -31,7 +33,8 @@ import numpy as np
 CFG_KEYS = ["hand_side", "enable_on_board", "control_freq", "speed_coef", "current_coef", "action_scale",
             "clip_actions", "init_traj_path", "init_traj_step_s", "grip_phase_s", "pinch_trigger_threshold",
             "pinch_trigger_min_fingers", "force_scale", "contact_threshold", "tactile_force_clip",
-            "enable_contact_pos", "disable_tactile_ids", "tactile_calibration_path"]
+            "enable_contact_pos", "disable_tactile_ids", "tactile_calibration_path", "rest_tare", "rest_tare_s",
+            "rest_warn_n", "rest_tare_max_spread_n"]
 
 
 def _md5(path):
@@ -61,7 +64,7 @@ class DeployRecorder:
         self.flush_every = flush_every
         self.t0 = time.perf_counter()
         self.rows = {k: [] for k in ["t", "deploy_state", "episode_step", "policy_time", "obs", "action",
-                                     "dof_pos", "cur_targets", "raw_f6"]}
+                                     "dof_pos", "cur_targets", "raw_f6", "f6_baseline"]}
         self.parts = []
 
         cfg = self.env.cfg
@@ -99,13 +102,15 @@ class DeployRecorder:
         r["cur_targets"].append(_np(env.cur_targets)[0].astype(np.float32))
         raw = env.raw_fingertip_forces() if hasattr(env, "raw_fingertip_forces") else np.full((5, 3), np.nan)
         r["raw_f6"].append(np.asarray(raw, dtype=np.float32))
+        base = getattr(env, "force_baseline", None)
+        r["f6_baseline"].append(np.full((5, 3), np.nan, dtype=np.float32) if base is None else _np(base).astype(np.float32))
         if len(r["t"]) >= self.flush_every:
             self._write_part()
 
     def _write_part(self):
         if not self.rows["t"]:
             return
-        arrays = {k: np.stack(v) if k in ("obs", "action", "dof_pos", "cur_targets", "raw_f6") else np.asarray(v)
+        arrays = {k: np.stack(v) if k in ("obs", "action", "dof_pos", "cur_targets", "raw_f6", "f6_baseline") else np.asarray(v)
                   for k, v in self.rows.items()}
         part = f"{self.path[:-len('.npz')]}.part{len(self.parts):04d}.npz"
         np.savez(part, **arrays)

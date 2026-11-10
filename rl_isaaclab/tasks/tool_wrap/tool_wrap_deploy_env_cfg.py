@@ -16,6 +16,11 @@ class SharpaWaveToolWrapDeployEnvCfg(_InhandRotateDeployCfg):
     enable_contact_pos = False
     contact_threshold = 0.2         # N; sim zeroes forces below tactile_force_threshold = 0.2
     tactile_force_clip = 15.0
+    # rest re-zero on each start (see tool_wrap_deploy_env.py); rest_tare = False only prints the rest reading
+    rest_tare = True
+    rest_tare_s = 0.4
+    rest_warn_n = 1.0               # N raw; warn above this
+    rest_tare_max_spread_n = 0.5    # N raw; a digit moving more than this while sampling isn't re-zeroed
     # F6 force axes -> sim elastomer frame, per fingertip (thumb..pinky): force_sim = sign * rotation @ F6[:3].
     # Written by scripts/calibrate_tool_wrap_f6.py and loaded at start-up; the values below are only the fallback.
     tactile_calibration_path = "cache/tool_wrap_f6_calibration.json"

@@ -5,6 +5,11 @@ runs. After grip_phase_s the grip is done; on_grip_phase_done() is where your ar
 
 Differences from the rotation deploy: the tactile observation is the fingertip force vector (from F6) instead of
 its magnitude, and the frame layout is the tool-wrap one (74 values).
+
+Rest re-zero: on each start the hand opens to the first row of the closing trajectory, and each fingertip's F6 is
+averaged for rest_tare_s with nothing touching. That reading is printed and then subtracted for the episode (the
+observation and the pinch trigger). It covers a pad that reads a steady false force at rest; the real index pad has
+read 4-9 N that way.
 '''
 
 from __future__ import annotations
@@ -41,6 +46,7 @@ class SharpaWaveToolWrapDeployEnv(SharpaWaveInhandRotateDeployEnv):
         self.force_sign = torch.tensor(sign, dtype=torch.float32, device=cfg.device).reshape(5)
         self.policy_start_wall = None
         self.grip_phase_reported = False
+        self.force_baseline = torch.zeros((5, 3), dtype=torch.float32, device=cfg.device)  # raw F6 at rest, subtracted
         super().__init__(cfg, render_mode, **kwargs)
 
     def tactile_callback(self, frame):
@@ -69,7 +75,8 @@ class SharpaWaveToolWrapDeployEnv(SharpaWaveInhandRotateDeployEnv):
         for ch in range(5):
             _, f_vec, _, contact_pos_ch = self.frames[4-ch+5*(1-self.cfg.hand_side)]
             if f_vec is not None:
-                force[ch] = self.force_sign[ch] * (self.force_rotation[ch] @ f_vec.to(self.device))
+                f_vec = f_vec.to(self.device) - self.force_baseline[ch]
+                force[ch] = self.force_sign[ch] * (self.force_rotation[ch] @ f_vec)
             if contact_pos_ch is not None:
                 contact_pos[ch] = torch.as_tensor(contact_pos_ch, dtype=torch.float32, device=self.device)
         force[self.cfg.disable_tactile_ids] = 0.0
@@ -92,6 +99,42 @@ class SharpaWaveToolWrapDeployEnv(SharpaWaveInhandRotateDeployEnv):
             if f_vec is not None:
                 out[ch] = f_vec.cpu().numpy()
         return out
+
+    def tare_rest_forces(self):
+        '''Average each fingertip's raw F6 for rest_tare_s (hand open, nothing touching) and subtract it from now on.
+        A digit whose reading moves by more than rest_tare_max_spread_n while sampling isn't re-zeroed.'''
+        self.force_baseline.zero_()
+        if not self.cfg.enable_tactile:
+            return
+        samples = []
+        t_end = time.perf_counter() + self.cfg.rest_tare_s
+        while time.perf_counter() < t_end:
+            samples.append(self.raw_fingertip_forces())
+            time.sleep(1.0 / 60.0)
+        s = np.stack(samples)                                   # (k, 5, 3)
+        base = np.median(s, axis=0)
+        spread = np.linalg.norm(s - base, axis=-1).max(axis=0)  # (5,)
+        mags = np.linalg.norm(base, axis=-1)
+        steady = spread <= self.cfg.rest_tare_max_spread_n
+        print("[tool_wrap] rest F6 (N, raw): " + "  ".join(f"{n} {m:.1f}" for n, m in zip(FINGERS, mags)))
+        high = [f"{n} {m:.1f} N" for n, m, ok in zip(FINGERS, mags, steady) if ok and m > self.cfg.rest_warn_n]
+        if high:
+            print(f"[tool_wrap] WARNING: reading at rest with nothing touching: {', '.join(high)}. Subtracting it for "
+                  f"this try. Press 'q', then 't' (SDK re-zero) with the hand open and nothing touching, then 'e'. If "
+                  f"it comes back, check that fingertip's pad.")
+        moving = [n for n, ok in zip(FINGERS, steady) if not ok]
+        if moving:
+            print(f"[tool_wrap] WARNING: {', '.join(moving)} changed by more than {self.cfg.rest_tare_max_spread_n} N "
+                  f"while sampling (touching something?); not re-zeroed.")
+        if self.cfg.rest_tare:
+            base[~steady] = 0.0
+            self.force_baseline[:] = torch.as_tensor(base, dtype=torch.float32, device=self.device)
+
+    def calib_tactile(self):
+        ok = super().calib_tactile()
+        if ok:
+            self.force_baseline.zero_()  # the SDK re-zeroed; the next start measures the rest reading again
+        return ok
 
     def compute_observations(self):
         forces, contact_pos = self.get_tactile_info()
@@ -137,6 +180,7 @@ class SharpaWaveToolWrapDeployEnv(SharpaWaveInhandRotateDeployEnv):
         j = 0
         self.hand.set_joint_position(traj[j])
         time.sleep(0.5)
+        self.tare_rest_forces()
         while not self._pinch_triggered() and j + 1 < len(traj):
             j += 1
             self.hand.set_joint_position(traj[j])

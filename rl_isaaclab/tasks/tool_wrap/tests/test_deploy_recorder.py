@@ -38,5 +38,6 @@ def test_parts_merge_into_one_file(tmp_path):
     assert files == [rec.path.split("/")[-1]]  # parts removed
     d = np.load(rec.path, allow_pickle=False)
     assert d["obs"].shape == (130, 222) and d["raw_f6"].shape == (130, 5, 3)
+    assert d["f6_baseline"].shape == (130, 5, 3) and np.isnan(d["f6_baseline"]).all()  # FakeEnv has no rest re-zero
     assert np.array_equal(d["episode_step"], np.arange(130)) and np.array_equal(d["obs"][:, 0], np.arange(130))
     assert json.loads(str(d["meta_json"]))["task"] == "task"
